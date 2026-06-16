@@ -30,7 +30,9 @@ contract Vault {
     /// @notice ETH balance of each depositor.
     mapping(address => uint256) public balanceOf;
 
-    /// @notice Sum of all currently deposited ETH (mirrors address(this).balance).
+    /// @notice Sum of all currently deposited ETH (tracked independently of address(this).balance).
+    /// @dev address(this).balance may exceed totalDeposits if ETH is force-fed via selfdestruct
+    ///      or coinbase rewards. Accounting must rely on this value, not on the raw balance.
     uint256 public totalDeposits;
 
     /// @notice Whether the vault has been permanently paused (e.g., after an emergency sweep).
@@ -91,14 +93,19 @@ contract Vault {
         emit Withdrawn(msg.sender, amount);
     }
 
-    /// @notice Emergency drain — sweeps all vault funds to `to`.
+    /// @notice Emergency drain — sweeps accounted vault funds to `to`.
     /// @dev Owner-gated emergency hatch. Permanently pauses the vault so that
     ///      stale per-user balances cannot be redeemed against future deposits.
+    ///      Only `totalDeposits` is swept; any ETH force-fed via selfdestruct or
+    ///      coinbase rewards is intentionally left behind to preserve the
+    ///      accounting invariant and avoid mixing donated ETH into the sweep.
     /// @param to Recipient of swept funds.
     function emergencySweep(address to) external {
         if (paused) revert VaultPaused();
 
-        uint256 amount = address(this).balance;
+        // Sweep only accounted deposits, not address(this).balance, which may be
+        // inflated by force-fed ETH (selfdestruct / coinbase).
+        uint256 amount = totalDeposits;
 
         // Effects before interactions (CEI): zero accounting and permanently pause
         // the vault so deposit/withdraw cannot resume against stale balanceOf entries.
