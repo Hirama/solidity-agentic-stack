@@ -20,6 +20,12 @@ contract Vault {
     /// @notice Thrown when ETH transfer to the caller fails.
     error TransferFailed();
 
+    /// @notice Thrown when a non-owner calls an owner-gated function.
+    error NotOwner();
+
+    /// @notice Thrown when the zero address is supplied where a non-zero address is required.
+    error ZeroAddress();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -29,6 +35,9 @@ contract Vault {
 
     /// @notice Sum of all currently deposited ETH (mirrors address(this).balance).
     uint256 public totalDeposits;
+
+    /// @notice Owner of the vault, set at deployment. Gates privileged functions.
+    address public immutable owner;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -43,6 +52,25 @@ contract Vault {
     /// @param withdrawer Address that withdrew.
     /// @param amount     Wei withdrawn.
     event Withdrawn(address indexed withdrawer, uint256 amount);
+
+    /*//////////////////////////////////////////////////////////////
+                                MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Restricts a function to the contract owner.
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Sets the deployer as the owner of the vault.
+    constructor() {
+        owner = msg.sender;
+    }
 
     /*//////////////////////////////////////////////////////////////
                               EXTERNAL FUNCTIONS
