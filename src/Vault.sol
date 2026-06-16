@@ -23,6 +23,9 @@ contract Vault {
     /// @notice Thrown when a non-owner calls an owner-gated function.
     error NotOwner();
 
+    /// @notice Thrown when the vault has been permanently disabled via emergency sweep.
+    error VaultDead();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -35,6 +38,9 @@ contract Vault {
 
     /// @notice Owner authorized to invoke emergency operations.
     address public owner;
+
+    /// @notice Once true, the vault is permanently disabled. Deposits and withdrawals revert.
+    bool public dead;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -65,6 +71,12 @@ contract Vault {
         _;
     }
 
+    /// @notice Reverts if the vault has been permanently disabled.
+    modifier notDead() {
+        if (dead) revert VaultDead();
+        _;
+    }
+
     /*//////////////////////////////////////////////////////////////
                                CONSTRUCTOR
     //////////////////////////////////////////////////////////////*/
@@ -80,7 +92,7 @@ contract Vault {
 
     /// @notice Deposit ETH into the vault.
     /// @dev msg.value must be > 0.
-    function deposit() external payable {
+    function deposit() external payable notDead {
         if (msg.value == 0) revert ZeroDeposit();
 
         // Effects before interactions (CEI).
@@ -92,7 +104,7 @@ contract Vault {
 
     /// @notice Withdraw `amount` wei from the vault.
     /// @param amount Wei to withdraw.
-    function withdraw(uint256 amount) external {
+    function withdraw(uint256 amount) external notDead {
         uint256 available = balanceOf[msg.sender];
         if (amount > available) revert InsufficientBalance(amount, available);
 
@@ -108,11 +120,15 @@ contract Vault {
     }
 
     /// @notice Emergency drain — sweeps all vault funds to `to`.
-    /// @dev Owner-gated emergency hatch.
+    /// @dev Owner-gated emergency hatch. One-shot: permanently disables the vault.
     /// @param to Recipient of swept funds.
-    function emergencySweep(address to) external onlyOwner {
+    function emergencySweep(address to) external onlyOwner notDead {
         uint256 amount = address(this).balance;
+
+        // Effects before interactions (CEI). Permanently disable the vault so that
+        // user accounting cannot become desynced from contract balance.
         totalDeposits = 0;
+        dead = true;
 
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
