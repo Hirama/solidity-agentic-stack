@@ -23,9 +23,18 @@ contract Vault {
     /// @notice Thrown when the vault has been permanently paused via emergency sweep.
     error VaultPaused();
 
+    /// @notice Thrown when a non-owner calls an owner-gated function.
+    error NotOwner();
+
+    /// @notice Thrown when a zero address is provided where it is not allowed.
+    error ZeroAddress();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
+
+    /// @notice Address authorized to invoke owner-gated functions (e.g., emergencySweep).
+    address public immutable owner;
 
     /// @notice ETH balance of each depositor.
     mapping(address => uint256) public balanceOf;
@@ -55,6 +64,25 @@ contract Vault {
     /// @param to     Recipient of swept funds.
     /// @param amount Wei swept.
     event EmergencySwept(address indexed to, uint256 amount);
+
+    /*//////////////////////////////////////////////////////////////
+                               MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Restricts a function to the contract owner.
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Sets the immutable owner of the vault to the deployer.
+    constructor() {
+        owner = msg.sender;
+    }
 
     /*//////////////////////////////////////////////////////////////
                               EXTERNAL FUNCTIONS
@@ -95,8 +123,9 @@ contract Vault {
     /// @dev Owner-gated emergency hatch. Permanently pauses the vault so that
     ///      stale per-user balances cannot be redeemed against future deposits.
     /// @param to Recipient of swept funds.
-    function emergencySweep(address to) external {
+    function emergencySweep(address to) external onlyOwner {
         if (paused) revert VaultPaused();
+        if (to == address(0)) revert ZeroAddress();
 
         uint256 amount = address(this).balance;
 
