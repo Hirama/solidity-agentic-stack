@@ -42,6 +42,10 @@ aderyn .
 
 # Full definition-of-done gate
 forge fmt --check && forge build && FOUNDRY_PROFILE=ci forge test && slither . && aderyn .
+
+# Red team agent (requires ANTHROPIC_API_KEY)
+python scripts/redteam.py --dry-run   # print findings, no GitHub Issues
+python scripts/redteam.py             # print findings + file GitHub Issues
 ```
 
 ---

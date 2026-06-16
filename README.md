@@ -16,7 +16,8 @@ One rule governs every design decision in this repo:
 | **2 — Verification** | Toolchain that declares correctness | `foundry.toml`, `slither.config.json`, `aderyn.toml` |
 | **3 — Tests** | Constitution the protocol must satisfy | `test/Vault.t.sol`, `test/handlers/VaultHandler.sol`, `test/invariant/VaultInvariant.t.sol` |
 | **4 — Agent contract** | What the agent can and cannot do | `CLAUDE.md` |
-| **5 — CI gate** | Immutable verification pipeline | `.github/workflows/ci.yml` |
+| **5 — CI gate** | Immutable verification pipeline | `.github/workflows/ci.yml`, `.github/workflows/redteam.yml` |
+| **6 — Red team agent** | Autonomous attacker — finds bugs and files issues | `scripts/redteam.py` |
 
 ---
 
@@ -66,7 +67,27 @@ Replace this template in order — invariants first, always.
 
 ## Red-Team Workflow
 
-To engage the agent as an auditor:
+### Autonomous red team (CI)
+
+`scripts/redteam.py` is an autonomous agent that runs on every PR touching `src/**`. It:
+
+1. Reads all `src/**/*.sol` files
+2. Calls `claude-opus-4-7` with adaptive thinking (security audit system prompt)
+3. Returns structured findings (severity, class, location, description, PoC outline, recommendation)
+4. Files a GitHub Issue for every Critical / High / Medium finding
+
+**Setup:** add `ANTHROPIC_API_KEY` to your repo's GitHub Actions secrets.
+
+**Run locally:**
+```bash
+pip install anthropic
+python scripts/redteam.py --dry-run   # print findings, no issues filed
+python scripts/redteam.py             # print findings + file GitHub Issues
+```
+
+### Manual red team (Claude Code session)
+
+To engage the coding agent as an interactive auditor:
 
 ```
 Act as a smart contract auditor. Assume Vault.sol is broken.
