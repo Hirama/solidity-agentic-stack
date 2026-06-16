@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Check formatting
+        run: forge fmt --check
+
+      - name: Build (with sizes)
+        run: forge build --sizes
+
+      - name: Run tests
+        run: forge test
+        env:
+          FOUNDRY_PROFILE: ci
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Generate coverage report
+        run: forge coverage --report lcov
+
+      - name: Enforce minimum 90% line coverage
+        run: |
+          LINES_FOUND=$(grep -Po 'LF:\K[0-9]+' lcov.info | paste -sd+ | bc)
+          LINES_HIT=$(grep -Po 'LH:\K[0-9]+' lcov.info | paste -sd+ | bc)
+          PCT=$(echo "scale=2; $LINES_HIT * 100 / $LINES_FOUND" | bc)
+          echo "Coverage: ${PCT}% ($LINES_HIT / $LINES_FOUND lines)"
+          awk "BEGIN { if ($PCT < 90) { print \"Coverage ${PCT}% below 90% threshold\"; exit 1 } }"
+
+      - name: Upload lcov
+        uses: actions/upload-artifact@v4
+        with:
+          name: lcov
+          path: lcov.info
+
+  slither:
+    name: Slither
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        with:
+          fail-on: medium
+          slither-config: slither.config.json
+
+  aderyn:
+    name: Aderyn
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Cyfrin Up (aderyn)
+        run: curl -L https://raw.githubusercontent.com/Cyfrin/aderyn/dev/cyfrinup/install | bash
+        shell: bash
+
+      - name: Add Cyfrin to PATH
+        run: echo "$HOME/.cyfrin/bin" >> $GITHUB_PATH
+
+      - name: Run Aderyn
+        run: aderyn .
+
+      - name: Upload Aderyn report
+        uses: actions/upload-artifact@v4
+        with:
+          name: aderyn-report
+          path: report.md

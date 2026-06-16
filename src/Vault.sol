@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.30;
+
+// THIS IS A PLACEHOLDER. Delete and replace with your protocol.
+
+/// @title Vault
+/// @notice Minimal ETH vault — deposit and withdraw ETH with per-user balance tracking.
+/// @dev Demonstrates checks-effects-interactions and custom errors. Not production-ready.
+contract Vault {
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when a withdraw amount exceeds the caller's balance.
+    error InsufficientBalance(uint256 requested, uint256 available);
+
+    /// @notice Thrown when a zero-value deposit is attempted.
+    error ZeroDeposit();
+
+    /// @notice Thrown when ETH transfer to the caller fails.
+    error TransferFailed();
+
+    /*//////////////////////////////////////////////////////////////
+                                 STORAGE
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice ETH balance of each depositor.
+    mapping(address => uint256) public balanceOf;
+
+    /// @notice Sum of all currently deposited ETH (mirrors address(this).balance).
+    uint256 public totalDeposits;
+
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Emitted on a successful deposit.
+    /// @param depositor Address that deposited.
+    /// @param amount    Wei deposited.
+    event Deposited(address indexed depositor, uint256 amount);
+
+    /// @notice Emitted on a successful withdrawal.
+    /// @param withdrawer Address that withdrew.
+    /// @param amount     Wei withdrawn.
+    event Withdrawn(address indexed withdrawer, uint256 amount);
+
+    /*//////////////////////////////////////////////////////////////
+                              EXTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Deposit ETH into the vault.
+    /// @dev msg.value must be > 0.
+    function deposit() external payable {
+        if (msg.value == 0) revert ZeroDeposit();
+
+        // Effects before interactions (CEI).
+        balanceOf[msg.sender] += msg.value;
+        totalDeposits += msg.value;
+
+        emit Deposited(msg.sender, msg.value);
+    }
+
+    /// @notice Withdraw `amount` wei from the vault.
+    /// @param amount Wei to withdraw.
+    function withdraw(uint256 amount) external {
+        uint256 available = balanceOf[msg.sender];
+        if (amount > available) revert InsufficientBalance(amount, available);
+
+        // Effects before interactions (CEI).
+        balanceOf[msg.sender] = available - amount;
+        totalDeposits -= amount;
+
+        // Interaction last.
+        (bool ok,) = msg.sender.call{value: amount}("");
+        if (!ok) revert TransferFailed();
+
+        emit Withdrawn(msg.sender, amount);
+    }
+}
