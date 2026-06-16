@@ -29,6 +29,9 @@ contract Vault {
     /// @notice Thrown when a zero address is supplied where disallowed.
     error ZeroAddress();
 
+    /// @notice Thrown when deposit/withdraw is attempted after an emergency sweep has occurred.
+    error VaultSwept();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -44,6 +47,10 @@ contract Vault {
 
     /// @notice Pending owner in a two-step ownership handover.
     address public pendingOwner;
+
+    /// @notice True once an emergency sweep has been performed. Permanently disables
+    ///         deposits and withdrawals to prevent accounting drift against stale balances.
+    bool public swept;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -101,6 +108,7 @@ contract Vault {
     /// @notice Deposit ETH into the vault.
     /// @dev msg.value must be > 0.
     function deposit() external payable {
+        if (swept) revert VaultSwept();
         if (msg.value == 0) revert ZeroDeposit();
 
         // Effects before interactions (CEI).
@@ -113,6 +121,8 @@ contract Vault {
     /// @notice Withdraw `amount` wei from the vault.
     /// @param amount Wei to withdraw.
     function withdraw(uint256 amount) external {
+        if (swept) revert VaultSwept();
+
         uint256 available = balanceOf[msg.sender];
         if (amount > available) revert InsufficientBalance(amount, available);
 
@@ -129,13 +139,18 @@ contract Vault {
 
     /// @notice Emergency drain — sweeps all vault funds to `to`.
     /// @dev Owner-gated emergency hatch. Recipient must be non-zero.
+    ///      Permanently disables future deposits and withdrawals to avoid accounting
+    ///      drift between stale per-user balances and the now-empty vault.
     /// @param to Recipient of swept funds.
     function emergencySweep(address to) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
 
+        // Effects: mark vault as permanently swept and zero aggregate accounting.
+        swept = true;
         uint256 amount = address(this).balance;
         totalDeposits = 0;
 
+        // Interaction last.
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
 
