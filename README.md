@@ -1,6 +1,6 @@
 # Agentic Stack for Solidity Development 2026
 
-> Companion template for the article: [Agentic Stack for Solidity Development 2026](https://telegra.ph/) — [@soliditypedia](https://t.me/soliditypedia)
+> Companion template for the article: [Agentic Stack for Solidity Development 2026](https://telegra.ph/Agentic-Stack-for-Solidity-Development-2026-06-09) — [@soliditypedia](https://t.me/soliditypedia)
 
 One rule governs every design decision in this repo:
 
