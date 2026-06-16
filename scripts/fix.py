@@ -100,9 +100,54 @@ def extract_location(issue: dict) -> tuple[str, str]:
     m = re.search(r"\*\*Location:\*\*\s*`([^`]+)`", body)
     if not m:
         return "", ""
-    loc = m.group(1)  # e.g. "src/Vault.sol:withdraw()"
+    loc = m.group(1)  # e.g. "src/Vault.sol:withdraw" or "Vault.sol:withdraw"
     parts = loc.split(":")
     return parts[0], parts[1] if len(parts) > 1 else ""
+
+
+def extract_pr_number(issue: dict) -> int | None:
+    """Return PR number from issue body 'Detected on PR: #N' line, or None."""
+    m = re.search(r"\*\*Detected on PR:\*\*\s*#(\d+)", issue["body"])
+    return int(m.group(1)) if m else None
+
+
+def checkout_pr_branch(pr_number: int, repo_root: Path) -> str | None:
+    """Checkout the head ref of a PR. Returns the branch name or None."""
+    raw = subprocess.run(
+        ["gh", "pr", "view", str(pr_number), "--json", "headRefName"],
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+    )
+    if raw.returncode != 0:
+        print(f"WARNING: could not fetch PR #{pr_number}: {raw.stderr.strip()}", file=sys.stderr)
+        return None
+    head_ref = json.loads(raw.stdout)["headRefName"]
+    # Make sure the remote branch is fetched
+    run(["git", "fetch", "origin", head_ref], cwd=repo_root)
+    ok, out = run(["git", "checkout", head_ref], cwd=repo_root)
+    if not ok:
+        # Try as a tracking branch
+        run(["git", "checkout", "-b", head_ref, f"origin/{head_ref}"], cwd=repo_root)
+    print(f"  Checked out PR #{pr_number} head: {head_ref}")
+    return head_ref
+
+
+def resolve_source_path(repo_root: Path, raw_path: str) -> Path | None:
+    """Resolve a path that may be relative to repo root, or just a bare filename
+    that needs to be located under src/. Returns None if not found."""
+    candidate = repo_root / raw_path
+    if candidate.exists():
+        return candidate
+    # Try as bare filename under src/
+    filename = Path(raw_path).name
+    matches = list((repo_root / "src").rglob(filename))
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        print(f"WARNING: multiple matches for {filename} under src/: {matches}", file=sys.stderr)
+        return matches[0]
+    return None
 
 
 # ─── fix generation ───────────────────────────────────────────────────────────
@@ -217,17 +262,27 @@ def main() -> None:
     issue = fetch_issue(args.issue)
     print(f"  Title: {issue['title']}")
 
+    # If the issue was filed by a PR audit, fix on the PR branch
+    # (the buggy code lives there, not on main).
+    repo_root_for_pr = Path(__file__).parent.parent
+    pr_number = extract_pr_number(issue)
+    if pr_number and not args.dry_run:
+        print(f"  Issue references PR #{pr_number} — switching to its head branch")
+        checkout_pr_branch(pr_number, repo_root_for_pr)
+
     source_path, location = extract_location(issue)
     if not source_path:
         print("ERROR: could not parse Location from issue body.", file=sys.stderr)
         print("Expected format: **Location:** `src/Foo.sol:function_name`", file=sys.stderr)
         sys.exit(1)
 
-    abs_path = repo_root / source_path
-    if not abs_path.exists():
-        print(f"ERROR: {abs_path} not found.", file=sys.stderr)
+    abs_path = resolve_source_path(repo_root, source_path)
+    if abs_path is None:
+        print(f"ERROR: could not locate source file '{source_path}' under repo or src/", file=sys.stderr)
         sys.exit(1)
 
+    # Normalize source_path for downstream use (commit, branch name, prompt)
+    source_path = str(abs_path.relative_to(repo_root))
     original_code = abs_path.read_text()
     print(f"  File: {source_path} ({len(original_code)} chars)")
 
