@@ -46,6 +46,10 @@ forge fmt --check && forge build && FOUNDRY_PROFILE=ci forge test && slither . &
 # Red team agent (requires ANTHROPIC_API_KEY)
 python scripts/redteam.py --dry-run   # print findings, no GitHub Issues
 python scripts/redteam.py             # print findings + file GitHub Issues
+
+# Fix agent — patch a specific security issue (requires ANTHROPIC_API_KEY)
+python scripts/fix.py --issue 42 --dry-run   # apply fix locally, skip PR
+python scripts/fix.py --issue 42             # fix + forge test + open PR
 ```
 
 ---

@@ -67,23 +67,40 @@ Replace this template in order — invariants first, always.
 
 ## Red-Team Workflow
 
-### Autonomous red team (CI)
+### The loop
 
-`scripts/redteam.py` is an autonomous agent that runs on every PR touching `src/**`. It:
+```
+redteam.py finds bug → GitHub Issue
+    ↓
+fix.py --issue N → generates fix → forge test → PR
+    ↓
+redteam.yml re-runs on the PR (src/** changed)
+    ↓ clean              ↓ new issues found
+HUMAN MERGES        loop continues
+```
 
-1. Reads all `src/**/*.sol` files
-2. Calls `claude-opus-4-7` with adaptive thinking (security audit system prompt)
-3. Returns structured findings (severity, class, location, description, PoC outline, recommendation)
-4. Files a GitHub Issue for every Critical / High / Medium finding
+### Red team agent (`scripts/redteam.py`)
 
-**Setup:** add `ANTHROPIC_API_KEY` to your repo's GitHub Actions secrets.
+Runs on every PR touching `src/**`. Reads contracts → calls `claude-opus-4-7` → structured JSON findings → GitHub Issues for Critical/High/Medium.
 
-**Run locally:**
+**Setup:** add `ANTHROPIC_API_KEY` to GitHub Actions secrets.
+
 ```bash
 pip install anthropic
-python scripts/redteam.py --dry-run   # print findings, no issues filed
-python scripts/redteam.py             # print findings + file GitHub Issues
+python scripts/redteam.py --dry-run   # print findings only
+python scripts/redteam.py             # print + file GitHub Issues
 ```
+
+### Fix agent (`scripts/fix.py`)
+
+Takes a security issue number, reads the issue + affected file, generates a minimal fix, runs `forge test` (up to 3 retry attempts with error feedback), then opens a PR. Red team re-runs automatically on that PR.
+
+```bash
+python scripts/fix.py --issue 42 --dry-run   # fix locally, skip PR
+python scripts/fix.py --issue 42             # fix + forge test + open PR
+```
+
+Via GitHub Actions: **Actions → Fix Agent → Run workflow → enter issue number.**
 
 ### Manual red team (Claude Code session)
 

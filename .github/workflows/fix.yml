@@ -1,0 +1,47 @@
+name: Fix Agent
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue_number:
+        description: "GitHub Issue number to fix"
+        required: true
+        type: number
+
+jobs:
+  fix:
+    name: Generate & Verify Fix
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # Use a PAT so the push and PR creation can trigger other workflows
+          # (GITHUB_TOKEN-pushed commits don't trigger Actions by default).
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "fix-agent[bot]"
+          git config user.email "fix-agent[bot]@users.noreply.github.com"
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install anthropic
+
+      - name: Run fix agent
+        run: python scripts/fix.py --issue ${{ inputs.issue_number }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
