@@ -195,6 +195,22 @@ contract VaultTest is Test {
         vm.expectRevert(Vault.TransferFailed.selector);
         rejecter.withdraw(1 ether);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                        EMERGENCY SWEEP
+    //////////////////////////////////////////////////////////////*/
+
+    function test_emergencySweep_drainsVault() public {
+        vm.prank(alice);
+        vault.deposit{value: 5 ether}();
+
+        address recipient = makeAddr("recipient");
+        vault.emergencySweep(recipient);
+
+        assertEq(address(vault).balance, 0);
+        assertEq(vault.totalDeposits(), 0);
+        assertEq(recipient.balance, 5 ether);
+    }
 }
 
 /// @dev Helper: deposits normally, optionally rejects incoming ETH to trigger TransferFailed.

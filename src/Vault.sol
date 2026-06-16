@@ -44,6 +44,11 @@ contract Vault {
     /// @param amount     Wei withdrawn.
     event Withdrawn(address indexed withdrawer, uint256 amount);
 
+    /// @notice Emitted on emergency sweep.
+    /// @param to     Recipient of swept funds.
+    /// @param amount Wei swept.
+    event EmergencySwept(address indexed to, uint256 amount);
+
     /*//////////////////////////////////////////////////////////////
                               EXTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
@@ -75,5 +80,18 @@ contract Vault {
         if (!ok) revert TransferFailed();
 
         emit Withdrawn(msg.sender, amount);
+    }
+
+    /// @notice Emergency drain — sweeps all vault funds to `to`.
+    /// @dev Owner-gated emergency hatch.
+    /// @param to Recipient of swept funds.
+    function emergencySweep(address to) external {
+        uint256 amount = address(this).balance;
+        totalDeposits = 0;
+
+        (bool ok,) = to.call{value: amount}("");
+        if (!ok) revert TransferFailed();
+
+        emit EmergencySwept(to, amount);
     }
 }
