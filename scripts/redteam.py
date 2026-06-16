@@ -191,32 +191,60 @@ def ensure_labels() -> None:
         )
 
 
-def create_issue(finding: dict, pr_number: str | None) -> int | None:
-    """Create a GitHub Issue and return its number, or None on failure."""
-    severity = finding["severity"]
+def render_finding_md(f: dict) -> str:
+    return f"""### {f["id"]} — [{f["severity"]}] {f["class"]}
+
+**Location:** `{f["location"]}`
+
+**Description:** {f["description"]}
+
+**PoC outline:** {f["poc_outline"]}
+
+**Recommendation:** {f["recommendation"]}
+"""
+
+
+def create_audit_issue(findings: list[dict], pr_number: str | None) -> int | None:
+    """File ONE meta-issue summarizing all actionable findings for the audit run.
+
+    Embeds findings as JSON in a fenced code block so fix.py can parse them.
+    Returns the issue number or None on failure.
+    """
+    actionable = [f for f in findings if f["severity"] in ("Critical", "High", "Medium")]
+    if not actionable:
+        return None
+
+    severities = {f["severity"] for f in actionable}
+    top_severity = next(s for s in ("Critical", "High", "Medium") if s in severities)
     labels = ["security"]
-    if severity in SEVERITY_LABELS:
-        labels.append(SEVERITY_LABELS[severity])
+    if top_severity in SEVERITY_LABELS:
+        labels.append(SEVERITY_LABELS[top_severity])
 
-    title = f"[{severity}] {finding['class']}: {finding['location']}"
-    pr_ref = f"\n\n**Detected on PR:** #{pr_number}" if pr_number else ""
+    pr_ref = f" (PR #{pr_number})" if pr_number else ""
+    title = f"[Security Audit] {len(actionable)} finding(s){pr_ref}"
 
-    body = f"""## {finding["id"]} — {finding["class"]}
+    findings_json = json.dumps({"findings": actionable, "pr_number": pr_number}, indent=2)
+    findings_md = "\n".join(render_finding_md(f) for f in actionable)
+    pr_link = f"\n\n**Detected on PR:** #{pr_number}" if pr_number else ""
 
-**Severity:** {severity}
-**Location:** `{finding["location"]}`{pr_ref}
+    body = f"""## Security Audit Summary{pr_link}
 
-### Description
-{finding["description"]}
+Found **{len(actionable)} actionable** finding(s). Top severity: **{top_severity}**.
 
-### PoC Outline
-{finding["poc_outline"]}
-
-### Recommendation
-{finding["recommendation"]}
+{findings_md}
 
 ---
-*Filed by `scripts/redteam.py`. Fix agent will open a PR automatically.*
+
+<details>
+<summary>Findings JSON (for fix agent — do not edit)</summary>
+
+```json
+{findings_json}
+```
+
+</details>
+
+*Filed by `scripts/redteam.py`. Fix agent will open ONE PR addressing all findings.*
 """
 
     cmd = ["gh", "issue", "create", "--title", title, "--body", body]
@@ -226,14 +254,13 @@ def create_issue(finding: dict, pr_number: str | None) -> int | None:
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         print(
-            f"  WARNING: could not create issue for {finding['id']}: {result.stderr.strip()}",
+            f"  WARNING: could not create audit issue: {result.stderr.strip()}",
             file=sys.stderr,
         )
         return None
 
     url = result.stdout.strip()
-    print(f"  Issue created: {url}")
-    # URL format: https://github.com/owner/repo/issues/42
+    print(f"  Audit issue created: {url}")
     try:
         return int(url.rstrip("/").split("/")[-1])
     except ValueError:
@@ -241,18 +268,18 @@ def create_issue(finding: dict, pr_number: str | None) -> int | None:
 
 
 def dispatch_fix(issue_number: int) -> None:
-    """Trigger the fix workflow for a given issue number."""
+    """Trigger the fix workflow for the audit meta-issue."""
     result = subprocess.run(
         ["gh", "workflow", "run", "fix.yml", "-f", f"issue_number={issue_number}"],
         capture_output=True,
         text=True,
     )
     if result.returncode == 0:
-        print(f"  Fix agent dispatched for issue #{issue_number}")
+        print(f"  Fix agent dispatched for audit issue #{issue_number}")
     else:
         print(
             f"  WARNING: could not dispatch fix.yml for #{issue_number}: {result.stderr.strip()}\n"
-            "  (Run manually: python scripts/fix.py --issue {issue_number})",
+            f"  (Run manually: python scripts/fix.py --issue {issue_number})",
             file=sys.stderr,
         )
 
@@ -290,16 +317,15 @@ def main() -> None:
 
     actionable = [f for f in findings if f["severity"] in ("Critical", "High", "Medium")]
     if not actionable:
-        print("\nNo Critical/High/Medium findings — no issues created.")
+        print("\nNo Critical/High/Medium findings — clean audit.")
         return
 
     pr_number = os.environ.get("PR_NUMBER")
-    print(f"\nCreating GitHub Issues for {len(actionable)} finding(s)...")
+    print(f"\nFiling single meta-issue for {len(actionable)} actionable finding(s)...")
     ensure_labels()
-    for finding in actionable:
-        issue_number = create_issue(finding, pr_number)
-        if issue_number:
-            dispatch_fix(issue_number)
+    issue_number = create_audit_issue(findings, pr_number)
+    if issue_number:
+        dispatch_fix(issue_number)
 
 
 if __name__ == "__main__":

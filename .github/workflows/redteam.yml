@@ -9,6 +9,9 @@ on:
 jobs:
   redteam:
     name: Security Audit
+    # Cascade guard: skip PRs already labeled by the fix agent.
+    # Without this, every fix PR would trigger another audit → cascade.
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'auto-fix') }}
     runs-on: ubuntu-latest
     permissions:
       issues: write
