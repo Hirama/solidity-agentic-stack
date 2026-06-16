@@ -180,4 +180,45 @@ contract VaultTest is Test {
         assertEq(vault.balanceOf(alice), deposit - withdrawAmt);
         assertEq(vault.totalDeposits(), deposit - withdrawAmt);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                        TRANSFER FAILURE
+    //////////////////////////////////////////////////////////////*/
+
+    function test_withdraw_revertsWhenRecipientRejectsEth() public {
+        EthRejecter rejecter = new EthRejecter(vault);
+        vm.deal(address(rejecter), 1 ether);
+
+        rejecter.deposit(1 ether);
+        rejecter.setReject(true);
+
+        vm.expectRevert(Vault.TransferFailed.selector);
+        rejecter.withdraw(1 ether);
+    }
+}
+
+/// @dev Helper: deposits normally, optionally rejects incoming ETH to trigger TransferFailed.
+contract EthRejecter {
+    Vault internal immutable vault;
+    bool public shouldReject;
+
+    constructor(Vault _vault) {
+        vault = _vault;
+    }
+
+    function setReject(bool v) external {
+        shouldReject = v;
+    }
+
+    function deposit(uint256 amount) external {
+        vault.deposit{value: amount}();
+    }
+
+    function withdraw(uint256 amount) external {
+        vault.withdraw(amount);
+    }
+
+    receive() external payable {
+        if (shouldReject) revert();
+    }
 }
