@@ -20,6 +20,9 @@ contract Vault {
     /// @notice Thrown when ETH transfer to the caller fails.
     error TransferFailed();
 
+    /// @notice Thrown when the vault has been permanently paused via emergency sweep.
+    error VaultPaused();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -29,6 +32,10 @@ contract Vault {
 
     /// @notice Sum of all currently deposited ETH (mirrors address(this).balance).
     uint256 public totalDeposits;
+
+    /// @notice Whether the vault has been permanently paused (e.g., after an emergency sweep).
+    /// @dev Once true, deposits and withdrawals are disabled forever to prevent stale balance abuse.
+    bool public paused;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -56,6 +63,7 @@ contract Vault {
     /// @notice Deposit ETH into the vault.
     /// @dev msg.value must be > 0.
     function deposit() external payable {
+        if (paused) revert VaultPaused();
         if (msg.value == 0) revert ZeroDeposit();
 
         // Effects before interactions (CEI).
@@ -68,6 +76,7 @@ contract Vault {
     /// @notice Withdraw `amount` wei from the vault.
     /// @param amount Wei to withdraw.
     function withdraw(uint256 amount) external {
+        if (paused) revert VaultPaused();
         uint256 available = balanceOf[msg.sender];
         if (amount > available) revert InsufficientBalance(amount, available);
 
@@ -83,11 +92,18 @@ contract Vault {
     }
 
     /// @notice Emergency drain — sweeps all vault funds to `to`.
-    /// @dev Owner-gated emergency hatch.
+    /// @dev Owner-gated emergency hatch. Permanently pauses the vault so that
+    ///      stale per-user balances cannot be redeemed against future deposits.
     /// @param to Recipient of swept funds.
     function emergencySweep(address to) external {
+        if (paused) revert VaultPaused();
+
         uint256 amount = address(this).balance;
+
+        // Effects before interactions (CEI): zero accounting and permanently pause
+        // the vault so deposit/withdraw cannot resume against stale balanceOf entries.
         totalDeposits = 0;
+        paused = true;
 
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed();
