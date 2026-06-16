@@ -29,7 +29,7 @@ contract Vault {
     /// @notice Thrown when a zero address is supplied where disallowed.
     error ZeroAddress();
 
-    /// @notice Thrown when deposit/withdraw is attempted after an emergency sweep has occurred.
+    /// @notice Thrown when deposit is attempted after an emergency sweep has occurred.
     error VaultSwept();
 
     /*//////////////////////////////////////////////////////////////
@@ -39,7 +39,7 @@ contract Vault {
     /// @notice ETH balance of each depositor.
     mapping(address => uint256) public balanceOf;
 
-    /// @notice Sum of all currently deposited ETH (mirrors address(this).balance).
+    /// @notice Sum of all currently deposited ETH (mirrors address(this).balance pre-sweep).
     uint256 public totalDeposits;
 
     /// @notice Owner authorized to invoke emergency operations.
@@ -49,7 +49,9 @@ contract Vault {
     address public pendingOwner;
 
     /// @notice True once an emergency sweep has been performed. Permanently disables
-    ///         deposits and withdrawals to prevent accounting drift against stale balances.
+    ///         future deposits. Withdrawals remain enabled and are honored up to the
+    ///         vault's current ETH balance so users can still recover any funds that
+    ///         remain in (or are returned to) the contract after a sweep.
     bool public swept;
 
     /*//////////////////////////////////////////////////////////////
@@ -119,16 +121,24 @@ contract Vault {
     }
 
     /// @notice Withdraw `amount` wei from the vault.
+    /// @dev Withdrawals remain permitted after an emergency sweep so users can claim
+    ///      any residual or returned ETH up to the contract's current balance. The
+    ///      transfer call itself will revert via {TransferFailed} if the contract
+    ///      lacks sufficient ETH.
     /// @param amount Wei to withdraw.
     function withdraw(uint256 amount) external {
-        if (swept) revert VaultSwept();
-
         uint256 available = balanceOf[msg.sender];
         if (amount > available) revert InsufficientBalance(amount, available);
 
         // Effects before interactions (CEI).
         balanceOf[msg.sender] = available - amount;
-        totalDeposits -= amount;
+        // After a sweep `totalDeposits` is zeroed; guard the decrement so legitimate
+        // post-sweep withdrawals against returned funds do not underflow.
+        if (totalDeposits >= amount) {
+            totalDeposits -= amount;
+        } else {
+            totalDeposits = 0;
+        }
 
         // Interaction last.
         (bool ok,) = msg.sender.call{value: amount}("");
@@ -139,8 +149,10 @@ contract Vault {
 
     /// @notice Emergency drain — sweeps all vault funds to `to`.
     /// @dev Owner-gated emergency hatch. Recipient must be non-zero.
-    ///      Permanently disables future deposits and withdrawals to avoid accounting
-    ///      drift between stale per-user balances and the now-empty vault.
+    ///      Permanently disables future deposits to avoid accounting drift between
+    ///      stale per-user balances and the now-empty vault. Withdrawals remain
+    ///      enabled so users can still recover any ETH that subsequently returns to
+    ///      the contract.
     /// @param to Recipient of swept funds.
     function emergencySweep(address to) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
