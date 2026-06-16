@@ -37,6 +37,12 @@ contract Vault {
     /// @dev Once true, deposits and withdrawals are disabled forever to prevent stale balance abuse.
     bool public paused;
 
+    /// @dev List of addresses that have ever deposited, used to zero per-user balances on emergency sweep.
+    address[] private _depositors;
+
+    /// @dev Tracks whether an address is already present in `_depositors` to avoid duplicates.
+    mapping(address => bool) private _isDepositor;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -67,6 +73,10 @@ contract Vault {
         if (msg.value == 0) revert ZeroDeposit();
 
         // Effects before interactions (CEI).
+        if (!_isDepositor[msg.sender]) {
+            _isDepositor[msg.sender] = true;
+            _depositors.push(msg.sender);
+        }
         balanceOf[msg.sender] += msg.value;
         totalDeposits += msg.value;
 
@@ -92,16 +102,21 @@ contract Vault {
     }
 
     /// @notice Emergency drain — sweeps all vault funds to `to`.
-    /// @dev Owner-gated emergency hatch. Permanently pauses the vault so that
-    ///      stale per-user balances cannot be redeemed against future deposits.
+    /// @dev Owner-gated emergency hatch. Permanently pauses the vault and zeros
+    ///      every per-user balance so no stale accounting remains after the sweep.
     /// @param to Recipient of swept funds.
     function emergencySweep(address to) external {
         if (paused) revert VaultPaused();
 
         uint256 amount = address(this).balance;
 
-        // Effects before interactions (CEI): zero accounting and permanently pause
-        // the vault so deposit/withdraw cannot resume against stale balanceOf entries.
+        // Effects before interactions (CEI): zero all per-user accounting,
+        // zero global accounting, and permanently pause the vault so that
+        // deposit/withdraw cannot resume against stale balanceOf entries.
+        uint256 len = _depositors.length;
+        for (uint256 i = 0; i < len; ++i) {
+            balanceOf[_depositors[i]] = 0;
+        }
         totalDeposits = 0;
         paused = true;
 
