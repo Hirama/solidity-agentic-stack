@@ -23,6 +23,12 @@ contract Vault {
     /// @notice Thrown when a non-owner calls an owner-gated function.
     error NotOwner();
 
+    /// @notice Thrown when a non-pending-owner calls acceptOwnership.
+    error NotPendingOwner();
+
+    /// @notice Thrown when a zero address is supplied where disallowed.
+    error ZeroAddress();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -35,6 +41,9 @@ contract Vault {
 
     /// @notice Owner authorized to invoke emergency operations.
     address public owner;
+
+    /// @notice Pending owner in a two-step ownership handover.
+    address public pendingOwner;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -55,6 +64,16 @@ contract Vault {
     /// @param amount Wei swept.
     event EmergencySwept(address indexed to, uint256 amount);
 
+    /// @notice Emitted when a new pending owner is nominated.
+    /// @param previousPendingOwner Previously nominated pending owner.
+    /// @param newPendingOwner      Newly nominated pending owner.
+    event OwnershipTransferStarted(address indexed previousPendingOwner, address indexed newPendingOwner);
+
+    /// @notice Emitted when ownership is transferred.
+    /// @param previousOwner Previous owner.
+    /// @param newOwner      New owner.
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+
     /*//////////////////////////////////////////////////////////////
                                MODIFIERS
     //////////////////////////////////////////////////////////////*/
@@ -72,6 +91,7 @@ contract Vault {
     /// @notice Sets the deployer as the initial owner.
     constructor() {
         owner = msg.sender;
+        emit OwnershipTransferred(address(0), msg.sender);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -108,9 +128,11 @@ contract Vault {
     }
 
     /// @notice Emergency drain — sweeps all vault funds to `to`.
-    /// @dev Owner-gated emergency hatch.
+    /// @dev Owner-gated emergency hatch. Recipient must be non-zero.
     /// @param to Recipient of swept funds.
     function emergencySweep(address to) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+
         uint256 amount = address(this).balance;
         totalDeposits = 0;
 
@@ -118,5 +140,35 @@ contract Vault {
         if (!ok) revert TransferFailed();
 
         emit EmergencySwept(to, amount);
+    }
+
+    /// @notice Begin a two-step ownership transfer by nominating a new pending owner.
+    /// @dev Only the current owner may call. Pass address(0) to cancel a pending transfer.
+    /// @param newOwner The address nominated to become the next owner.
+    function transferOwnership(address newOwner) external onlyOwner {
+        address previousPendingOwner = pendingOwner;
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(previousPendingOwner, newOwner);
+    }
+
+    /// @notice Complete a two-step ownership transfer.
+    /// @dev Only the pending owner may call.
+    function acceptOwnership() external {
+        address newOwner = msg.sender;
+        if (newOwner != pendingOwner) revert NotPendingOwner();
+
+        address previousOwner = owner;
+        owner = newOwner;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previousOwner, newOwner);
+    }
+
+    /// @notice Renounce ownership, leaving the contract without an owner.
+    /// @dev Only the current owner may call. Emergency operations will no longer be callable.
+    function renounceOwnership() external onlyOwner {
+        address previousOwner = owner;
+        owner = address(0);
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previousOwner, address(0));
     }
 }
