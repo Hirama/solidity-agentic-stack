@@ -20,6 +20,9 @@ contract Vault {
     /// @notice Thrown when ETH transfer to the caller fails.
     error TransferFailed();
 
+    /// @notice Thrown when a non-owner calls an owner-gated function.
+    error NotOwner();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -29,6 +32,9 @@ contract Vault {
 
     /// @notice Sum of all currently deposited ETH (mirrors address(this).balance).
     uint256 public totalDeposits;
+
+    /// @notice Owner authorized to invoke emergency operations.
+    address public owner;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -48,6 +54,25 @@ contract Vault {
     /// @param to     Recipient of swept funds.
     /// @param amount Wei swept.
     event EmergencySwept(address indexed to, uint256 amount);
+
+    /*//////////////////////////////////////////////////////////////
+                               MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Restricts a function to the contract owner.
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Sets the deployer as the initial owner.
+    constructor() {
+        owner = msg.sender;
+    }
 
     /*//////////////////////////////////////////////////////////////
                               EXTERNAL FUNCTIONS
@@ -85,7 +110,7 @@ contract Vault {
     /// @notice Emergency drain — sweeps all vault funds to `to`.
     /// @dev Owner-gated emergency hatch.
     /// @param to Recipient of swept funds.
-    function emergencySweep(address to) external {
+    function emergencySweep(address to) external onlyOwner {
         uint256 amount = address(this).balance;
         totalDeposits = 0;
 
