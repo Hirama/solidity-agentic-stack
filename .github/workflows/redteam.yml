@@ -13,6 +13,10 @@ jobs:
     permissions:
       issues: write
       pull-requests: read
+      # workflow:write needed to dispatch fix.yml via gh workflow run
+      # GITHUB_TOKEN does not get this scope — add GH_PAT secret (repo + workflow scope)
+      # for the auto-dispatch to work. Without it, fix.py must be triggered manually.
+      actions: write
     steps:
       - uses: actions/checkout@v4
 
@@ -28,5 +32,7 @@ jobs:
         run: python scripts/redteam.py
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GH_PAT (repo + workflow scope) enables auto-dispatch of fix.yml.
+          # Falls back to GITHUB_TOKEN — issue creation works, dispatch may not.
+          GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}

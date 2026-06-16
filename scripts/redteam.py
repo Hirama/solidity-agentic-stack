@@ -191,7 +191,8 @@ def ensure_labels() -> None:
         )
 
 
-def create_issue(finding: dict, pr_number: str | None) -> None:
+def create_issue(finding: dict, pr_number: str | None) -> int | None:
+    """Create a GitHub Issue and return its number, or None on failure."""
     severity = finding["severity"]
     labels = ["security"]
     if severity in SEVERITY_LABELS:
@@ -215,7 +216,7 @@ def create_issue(finding: dict, pr_number: str | None) -> None:
 {finding["recommendation"]}
 
 ---
-*Filed by `scripts/redteam.py` (red team agent). Verify, fix, then close.*
+*Filed by `scripts/redteam.py`. Fix agent will open a PR automatically.*
 """
 
     cmd = ["gh", "issue", "create", "--title", title, "--body", body]
@@ -223,11 +224,35 @@ def create_issue(finding: dict, pr_number: str | None) -> None:
         cmd += ["--label", label]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode == 0:
-        print(f"  Issue created: {result.stdout.strip()}")
-    else:
+    if result.returncode != 0:
         print(
             f"  WARNING: could not create issue for {finding['id']}: {result.stderr.strip()}",
+            file=sys.stderr,
+        )
+        return None
+
+    url = result.stdout.strip()
+    print(f"  Issue created: {url}")
+    # URL format: https://github.com/owner/repo/issues/42
+    try:
+        return int(url.rstrip("/").split("/")[-1])
+    except ValueError:
+        return None
+
+
+def dispatch_fix(issue_number: int) -> None:
+    """Trigger the fix workflow for a given issue number."""
+    result = subprocess.run(
+        ["gh", "workflow", "run", "fix.yml", "-f", f"issue_number={issue_number}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print(f"  Fix agent dispatched for issue #{issue_number}")
+    else:
+        print(
+            f"  WARNING: could not dispatch fix.yml for #{issue_number}: {result.stderr.strip()}\n"
+            "  (Run manually: python scripts/fix.py --issue {issue_number})",
             file=sys.stderr,
         )
 
@@ -272,7 +297,9 @@ def main() -> None:
     print(f"\nCreating GitHub Issues for {len(actionable)} finding(s)...")
     ensure_labels()
     for finding in actionable:
-        create_issue(finding, pr_number)
+        issue_number = create_issue(finding, pr_number)
+        if issue_number:
+            dispatch_fix(issue_number)
 
 
 if __name__ == "__main__":
