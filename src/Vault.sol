@@ -23,6 +23,9 @@ contract Vault {
     /// @notice Thrown when the vault has been permanently paused via emergency sweep.
     error VaultPaused();
 
+    /// @notice Thrown when a non-owner attempts to call an owner-gated function.
+    error NotOwner();
+
     /*//////////////////////////////////////////////////////////////
                                  STORAGE
     //////////////////////////////////////////////////////////////*/
@@ -38,6 +41,9 @@ contract Vault {
     /// @notice Whether the vault has been permanently paused (e.g., after an emergency sweep).
     /// @dev Once true, deposits and withdrawals are disabled forever to prevent stale balance abuse.
     bool public paused;
+
+    /// @notice The owner authorized to invoke owner-gated functions (e.g., emergencySweep).
+    address public immutable owner;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -57,6 +63,25 @@ contract Vault {
     /// @param to     Recipient of swept funds.
     /// @param amount Wei swept.
     event EmergencySwept(address indexed to, uint256 amount);
+
+    /*//////////////////////////////////////////////////////////////
+                                MODIFIERS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Restricts a function to the vault owner.
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert NotOwner();
+        _;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Initializes the vault and assigns ownership to the deployer.
+    constructor() {
+        owner = msg.sender;
+    }
 
     /*//////////////////////////////////////////////////////////////
                               EXTERNAL FUNCTIONS
@@ -100,7 +125,7 @@ contract Vault {
     ///      coinbase rewards is intentionally left behind to preserve the
     ///      accounting invariant and avoid mixing donated ETH into the sweep.
     /// @param to Recipient of swept funds.
-    function emergencySweep(address to) external {
+    function emergencySweep(address to) external onlyOwner {
         if (paused) revert VaultPaused();
 
         // Sweep only accounted deposits, not address(this).balance, which may be
