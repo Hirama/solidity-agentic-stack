@@ -40,7 +40,13 @@ cast wallet import deployer --interactive
 forge script script/Deploy.s.sol --account deployer --broadcast
 ```
 
-**MCP:** copy `.mcp.json.example` → `.mcp.json`, fill RPC URL. Agent reads chain state, never touches keys.
+**MCP + skills:** copy `.mcp.json.example` → `.mcp.json` for the Blockscout server (chain reads, no key). Foundry knowledge ships as project-scoped skills under `.claude/skills/` — loaded by Claude Code on demand:
+
+| Skill | When it triggers |
+|-------|------------------|
+| `foundry-cheatcodes` | writing Forge tests w/ `vm.*` |
+| `foundry-invariants` | designing handler + invariant suite |
+| `foundry-cast` | reading chain state from CLI |
 
 ---
 

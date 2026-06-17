@@ -2,5 +2,7 @@ cache/
 out/
 broadcast/
 .env
+.mcp.json
 lcov.info
 report.md
+.claude/settings.local.json

@@ -1,16 +1,8 @@
 {
-  "_comment": "MCP = the agent's hands. These servers give Claude tools to read chain state, simulate txs, and inspect contracts — without ever touching a key or broadcasting. Copy to .mcp.json and fill in your values.",
+  "_comment": "MCP = the agent's hands. No official Foundry MCP exists, so this stack ships Foundry knowledge as skills under .claude/skills/ instead. Blockscout MCP covers chain reads. Copy to .mcp.json.",
   "mcpServers": {
-    "foundry": {
-      "_comment": "Foundry MCP (community, github.com/alexbakers/foundry-mcp) — cast/forge primitives: read storage, call functions, decode calldata.",
-      "command": "npx",
-      "args": ["-y", "foundry-mcp"],
-      "env": {
-        "RPC_URL": "${RPC_MAINNET}"
-      }
-    },
     "blockscout": {
-      "_comment": "Blockscout MCP = on-chain read access. Address info, txs, ABIs, token transfers — all read-only.",
+      "_comment": "Blockscout MCP — on-chain read access: address info, txs, ABIs, token transfers, contract storage. Read-only.",
       "url": "https://mcp.blockscout.com/mcp"
     }
   }
