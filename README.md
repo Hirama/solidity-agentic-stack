@@ -12,12 +12,12 @@ One rule governs every design decision in this repo:
 
 | Layer | Role | File(s) |
 |-------|------|---------|
-| **1 — Protocol** | The thing being built | `src/Vault.sol` |
-| **2 — Verification** | Toolchain that declares correctness | `foundry.toml`, `slither.config.json`, `aderyn.toml` |
-| **3 — Tests** | Constitution the protocol must satisfy | `test/Vault.t.sol`, `test/handlers/VaultHandler.sol`, `test/invariant/VaultInvariant.t.sol` |
-| **4 — Agent contract** | What the agent can and cannot do | `CLAUDE.md` |
-| **5 — CI gate** | Immutable verification pipeline | `.github/workflows/ci.yml`, `.github/workflows/redteam.yml` |
-| **6 — Red team agent** | Autonomous attacker — finds bugs and files issues | `scripts/redteam.py` |
+| **1. Protocol** | The thing being built | `src/Vault.sol` |
+| **2. Verification** | Toolchain that declares correctness | `foundry.toml`, `slither.config.json`, `aderyn.toml` |
+| **3. Tests** | Constitution the protocol must satisfy | `test/Vault.t.sol`, `test/handlers/VaultHandler.sol`, `test/invariant/VaultInvariant.t.sol` |
+| **4. Agent contract** | What the agent can and cannot do | `CLAUDE.md` |
+| **5. CI gate** | Immutable verification pipeline | `.github/workflows/ci.yml`, `.github/workflows/redteam.yml` |
+| **6. Red team agent** | Autonomous attacker — finds bugs and files issues | `scripts/redteam.py` |
 
 ---
 
