@@ -8,7 +8,7 @@ One rule governs every design decision in this repo:
 
 ---
 
-## The 5 Layers
+## The 6 Layers
 
 | Layer | Role | File(s) |
 |-------|------|---------|
@@ -28,7 +28,7 @@ One rule governs every design decision in this repo:
 curl -L https://foundry.paradigm.xyz | bash && foundryup
 
 # Clone and build
-git clone <this-repo> && cd <this-repo>
+git clone https://github.com/Hirama/solidity-agentic-stack.git && cd solidity-agentic-stack
 forge install
 forge build
 forge test

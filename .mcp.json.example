@@ -2,9 +2,9 @@
   "_comment": "MCP = the agent's hands. These servers give Claude tools to read chain state, simulate txs, and inspect contracts — without ever touching a key or broadcasting. Copy to .mcp.json and fill in your values.",
   "mcpServers": {
     "foundry": {
-      "_comment": "Foundry MCP gives the agent cast/forge primitives — read storage, call functions, decode calldata.",
+      "_comment": "Foundry MCP (community, github.com/alexbakers/foundry-mcp) — cast/forge primitives: read storage, call functions, decode calldata.",
       "command": "npx",
-      "args": ["@foundry-rs/mcp-server"],
+      "args": ["-y", "foundry-mcp"],
       "env": {
         "RPC_URL": "${RPC_MAINNET}"
       }
